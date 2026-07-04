@@ -1,0 +1,66 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuth() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function role() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role; }
+    function isAdmin() { return isAuth() && role() == 'admin'; }
+    function isVendor() { return isAuth() && role() == 'vendor'; }
+
+    match /users/{userId} {
+      allow read: if isAuth();
+      allow create: if false;
+      allow update: if (isAuth() && uid() == userId
+        && !('role' in request.resource.data)
+        && !('isCertified' in request.resource.data)
+        && !('isSuspended' in request.resource.data)
+        && !('walletBalance' in request.resource.data)
+        && !('subscriptionStatus' in request.resource.data)) || isAdmin();
+      allow delete: if isAdmin();
+    }
+    match /products/{productId} {
+      allow read: if resource.data.active == true || isAdmin();
+      allow create: if false;
+      allow update: if (isAuth() && resource.data.vId == uid()
+        && !('vendorCertified' in request.resource.data)
+        && !('vendorPremium' in request.resource.data)) || isAdmin();
+      allow delete: if isAdmin() || (isAuth() && resource.data.vId == uid());
+    }
+    match /orders/{orderId} {
+      allow create: if isAuth() && request.resource.data.buyerId == uid()
+        && request.resource.data.paymentStatus == 'UNPAID';
+      allow read: if isAdmin() || (isAuth() && (resource.data.buyerId == uid() || resource.data.vId == uid()));
+      allow update: if false;
+      allow delete: if false;
+    }
+    match /payments/{id} { allow read: if isAdmin() || (isAuth() && resource.data.buyerId == uid()); allow write: if false; }
+    match /subscription_payments/{id} { allow read: if isAdmin() || (isAuth() && resource.data.vendorId == uid()); allow create: if isAuth() && request.resource.data.vendorId == uid(); allow update: if false; allow delete: if false; }
+    match /wallet_transactions/{id} { allow read: if isAdmin() || (isAuth() && resource.data.vendorId == uid()); allow write: if false; }
+    match /platform_revenue/{id} { allow read: if isAdmin(); allow write: if false; }
+    match /withdrawal_requests/{id} {
+      allow read: if isAdmin() || (isAuth() && resource.data.vendorId == uid());
+      // La création passe désormais uniquement par la Cloud Function
+      // demanderRetrait (transaction atomique de débit du wallet).
+      allow create: if false;
+      allow update: if false; allow delete: if false;
+    }
+    match /notifications/{id} {
+      allow read: if isAuth() && resource.data.userId == uid();
+      allow update: if isAuth() && resource.data.userId == uid() && request.resource.data.keys().hasOnly(['read']);
+      allow create, delete: if false;
+    }
+    match /chats/{chatId} {
+      allow read: if isAuth() && uid() in resource.data.participants;
+      allow create, update, delete: if false;
+      match /messages/{msgId} {
+        allow read: if isAuth() && uid() in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow write: if false;
+      }
+    }
+    match /reviews/{id} { allow read: if true; allow write: if false; }
+    match /wishlists/{userId} { allow read, write: if isAuth() && uid() == userId; }
+    match /reports/{id} { allow create: if false; allow read: if isAdmin(); allow update: if isAdmin(); allow delete: if false; }
+    match /banners/{id} { allow read: if true; allow write: if isAdmin(); }
+    match /fcm_tokens/{userId} { allow read, write: if isAuth() && uid() == userId; }
+  }
+}
