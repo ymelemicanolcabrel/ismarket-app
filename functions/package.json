@@ -1,0 +1,14 @@
+{
+  "name": "ismarket-functions",
+  "version": "5.0.0",
+  "description": "ISMarket Firebase Cloud Functions",
+  "main": "index.js",
+  "engines": { "node": "18" },
+  "dependencies": {
+    "firebase-admin": "^11.11.0",
+    "firebase-functions": "^4.5.0",
+    "node-fetch": "^2.7.0",
+    "rate-limiter-flexible": "^3.0.8"
+  },
+  "private": true
+}
